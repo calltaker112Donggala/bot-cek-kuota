@@ -3,7 +3,7 @@ import json
 import re
 import aiohttp
 
-# 5 Paket Target yang dipantau
+# 5 Paket Target yang dipantau (< 500 MB)
 EXACT_TARGET_PACKAGES = [
     "bonus kuota whatsapp 10gb",
     "bonus kuota facebook 10gb",
@@ -49,7 +49,6 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
         "X-Requested-With": "XMLHttpRequest",
     }
 
-    # SET TIMEOUT STRICT: Maksimal 8 detik per nomor agar tidak gantung
     timeout = aiohttp.ClientTimeout(total=8)
 
     try:
@@ -74,6 +73,8 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
                     }
 
                 paket_kritis = []
+                punya_xtra_combo = False
+
                 quotas_groups = (
                     data.get("data", {})
                     .get("data_sp", {})
@@ -87,6 +88,10 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
                         pkg_name = str(pkg_info.get("name", "")).strip()
                         pkg_name_lower = pkg_name.lower()
 
+                        # Pengecekan keberadaan paket Xtra Combo
+                        if "xtra combo" in pkg_name_lower:
+                            punya_xtra_combo = True
+
                         benefits = item.get("benefits", [])
 
                         for b in benefits:
@@ -98,7 +103,6 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
                             ):
                                 sisa_mb = parse_mb_from_text(remaining_str)
 
-                                # Filter kuota < 500 MB (0.5 GB)
                                 if sisa_mb < AMBANG_BATAS_MB:
                                     sisa_gb = sisa_mb / 1024.0
                                     paket_kritis.append(
@@ -114,6 +118,7 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
                     "nomor": nomor,
                     "status": "SUCCESS",
                     "paket_kritis": paket_kritis,
+                    "punya_xtra_combo": punya_xtra_combo,
                 }
             else:
                 return {
