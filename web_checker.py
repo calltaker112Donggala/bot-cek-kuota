@@ -3,7 +3,6 @@ import json
 import re
 import aiohttp
 
-# 5 Paket Target yang dipantau (< 500 MB)
 EXACT_TARGET_PACKAGES = [
     "bonus kuota whatsapp 10gb",
     "bonus kuota facebook 10gb",
@@ -88,7 +87,6 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
                         pkg_name = str(pkg_info.get("name", "")).strip()
                         pkg_name_lower = pkg_name.lower()
 
-                        # Pengecekan keberadaan paket Xtra Combo
                         if "xtra combo" in pkg_name_lower:
                             punya_xtra_combo = True
 
