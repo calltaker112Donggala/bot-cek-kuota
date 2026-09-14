@@ -16,8 +16,8 @@ from web_checker import fetch_single_nomor_async
 
 BOT_TOKEN = "8702246699:AAHbVnZqmrlH4Eku29gzArtEZR05YjbTD5E"
 
-# Daftar nomor yang dipantau
-DAFTAR_NOMOR_XL = ["087735470478", "087735470466", "087747987646"]
+# Daftar nomor default
+DAFTAR_NOMOR_XL = []
 
 MINTA_NOMOR = 1
 
