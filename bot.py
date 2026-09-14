@@ -16,7 +16,7 @@ from web_checker import fetch_single_nomor_async
 
 BOT_TOKEN = "8702246699:AAHbVnZqmrlH4Eku29gzArtEZR05YjbTD5E"
 
-# Daftar nomor yang dipantau (Sesuaikan dengan nomor Anda)
+# Daftar nomor yang dipantau
 DAFTAR_NOMOR_XL = ["087735470478", "087735470466", "087747987646"]
 
 MINTA_NOMOR = 1
@@ -28,7 +28,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
             InlineKeyboardButton(
-                "📝 Cek Kuota (< 0.5 GB)", callback_data="cek_massal"
+                "📝 Cek Kuota Massal", callback_data="cek_massal"
             )
         ],
         [
@@ -43,9 +43,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     pesan = (
-        "🤖 **Bot Filter Kuota 5 Paket Bonus (< 0.5 GB)**\n\n"
-        f"Jumlah Nomor Dipantau: **{len(DAFTAR_NOMOR_XL)} Nomor**\n"
-        "Menampilkan paket: *WA, FB, IG, YT, TikTok* yang sisa kuotanya **< 500 MB**."
+        "🤖 **Bot Pemantau Kuota XL/AXIS**\n\n"
+        f"Jumlah Nomor Dipantau: **{len(DAFTAR_NOMOR_XL)} Nomor**\n\n"
+        "Fitur Pengecekan:\n"
+        "1. Filter 5 Paket Bonus (WA, FB, IG, YT, TikTok) **< 0.5 GB**\n"
+        "2. Deteksi Nomor **Tanpa Paket Xtra Combo**"
     )
 
     if update.message:
@@ -77,20 +79,20 @@ async def button_handler(
                 try:
                     await query.edit_message_text(
                         f"⏳ **Memproses Pengecekan ({idx}/{total_nomor})...**\n\n"
-                        f"📱 Sedang mengecek: `{nomor}`\n\n"
-                        f"_Maksimal waktu pengecekan: 8 detik per nomor..._",
+                        f"📱 Sedang mengecek: `{nomor}`",
                         parse_mode="Markdown",
                     )
                 except Exception:
                     pass
 
-                # Panggil fetch async dengan strict timeout
                 res = await fetch_single_nomor_async(session, nomor)
                 results.append(res)
                 await asyncio.sleep(0.5)
 
-        # Format Hasil Akhir (Format Gambar 2)
-        pesan_hasil = "📝 **List 1 (Sisa Kuota < 0.5 GB)**\n\n"
+        # ----------------------------------------------------------------------
+        # FORMAT HASIL 1: LIST DENGAN KUOTA < 0.5 GB
+        # ----------------------------------------------------------------------
+        pesan_hasil = "📝 **List 1 (Sisa Kuota 5 App < 0.5 GB)**\n\n"
         ada_paket_kritis = False
 
         for res in results:
@@ -114,7 +116,30 @@ async def button_handler(
                 )
 
         if not ada_paket_kritis:
-            pesan_hasil += "✅ **Tidak ada paket (< 0.5 GB) pada seluruh nomor yang diperiksa.**"
+            pesan_hasil += "✅ _Semua paket bonus > 0.5 GB / Aman._\n\n"
+
+        pesan_hasil += "-----------------------------------\n\n"
+
+        # ----------------------------------------------------------------------
+        # FORMAT HASIL 2: NOMOR TANPA PAKET XTRA COMBO
+        # ----------------------------------------------------------------------
+        pesan_hasil += "🚫 **List 2 (Tanpa Paket Xtra Combo)**\n\n"
+        tanpa_xtra_combo = []
+
+        for res in results:
+            if res["status"] == "SUCCESS" and not res.get(
+                "punya_xtra_combo", False
+            ):
+                nomor_display = res["nomor"]
+                if nomor_display.startswith("0"):
+                    nomor_display = "62" + nomor_display[1:]
+                tanpa_xtra_combo.append(nomor_display)
+
+        if tanpa_xtra_combo:
+            for no in tanpa_xtra_combo:
+                pesan_hasil += f"• `{no}` (Tidak ada Xtra Combo)\n"
+        else:
+            pesan_hasil += "✅ _Semua nomor memiliki paket Xtra Combo._"
 
         keyboard = [
             [
@@ -165,8 +190,6 @@ async def mulai_tambah(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def simpan_nomor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     teks_input = update.message.text.strip()
-
-    # Memisahkan input berdasarkan tanda koma
     list_raw_nomor = teks_input.split(",")
 
     nomor_berhasil = []
@@ -174,19 +197,16 @@ async def simpan_nomor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     nomor_gagal = []
 
     for item in list_raw_nomor:
-        nomor = item.strip()  # Hapus spasi di awal/akhir nomor
-
-        # Validasi sederhana: hanya angka dan diawali '08'
+        nomor = item.strip()
         if nomor.isdigit() and nomor.startswith("08"):
             if nomor not in DAFTAR_NOMOR_XL:
                 DAFTAR_NOMOR_XL.append(nomor)
                 nomor_berhasil.append(nomor)
             else:
                 nomor_duplikat.append(nomor)
-        elif nomor:  # Jika bukan string kosong
+        elif nomor:
             nomor_gagal.append(nomor)
 
-    # Menyusun laporan hasil penambahan
     pesan_laporan = "📋 **Hasil Penambahan Nomor:**\n\n"
 
     if nomor_berhasil:
@@ -196,7 +216,7 @@ async def simpan_nomor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     if nomor_duplikat:
-        pesan_laporan += f"ℹ️ **Sudah Ada / Duplikat ({len(nomor_duplikat)}):**\n"
+        pesan_laporan += f"ℹ️ **Sudah Ada ({len(nomor_duplikat)}):**\n"
         pesan_laporan += (
             ", ".join([f"`{no}`" for no in nomor_duplikat]) + "\n\n"
         )
@@ -205,12 +225,12 @@ async def simpan_nomor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pesan_laporan += f"❌ **Format Tidak Valid ({len(nomor_gagal)}):**\n"
         pesan_laporan += f"_Pesan: {', '.join(nomor_gagal)}_\n\n"
 
-    pesan_laporan += f"Total nomor tersimpan saat ini: **{len(DAFTAR_NOMOR_XL)} Nomor**."
+    pesan_laporan += f"Total nomor tersimpan: **{len(DAFTAR_NOMOR_XL)} Nomor**."
 
     keyboard = [
         [
             InlineKeyboardButton(
-                "📝 Cek Kuota (< 0.5 GB)", callback_data="cek_massal"
+                "📝 Cek Kuota Massal", callback_data="cek_massal"
             )
         ],
         [InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")],
@@ -223,6 +243,7 @@ async def simpan_nomor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     return ConversationHandler.END
+
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -248,5 +269,5 @@ if __name__ == "__main__":
     )
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    print("🚀 Bot Fast Check dengan Strict Timeout running...")
+    print("🚀 Bot Pemantau Kuota & Xtra Combo running...")
     app.run_polling()
