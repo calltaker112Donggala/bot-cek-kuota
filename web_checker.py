@@ -35,25 +35,22 @@ def parse_mb_from_text(text_kuota: str) -> float:
 
 
 async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
-    url = "https://kuota.store/index.php"
-    params = {"action": "cek_kuota", "msisdn": nomor}
+    # Menggunakan Proxy Reverse untuk bypass blokir IP Cloudflare 530
+    target_url = (
+        f"https://kuota.store/index.php?action=cek_kuota&msisdn={nomor}"
+    )
+    proxy_url = f"https://corsproxy.io/?{target_url}"
 
     headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
-        ),
-        "Accept": "application/json, text/javascript, */*; q=0.01",
-        "Referer": "https://kuota.store/",
-        "X-Requested-With": "XMLHttpRequest",
-        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json",
     }
 
     timeout = aiohttp.ClientTimeout(total=10)
 
     try:
         async with session.get(
-            url, params=params, headers=headers, timeout=timeout
+            proxy_url, headers=headers, timeout=timeout
         ) as resp:
             if resp.status == 200:
                 try:
@@ -137,5 +134,5 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
             "nomor": nomor,
             "status": "ERROR",
             "pesan": f"Gagal terkoneksi: {str(e)}",
-                                    }
+        }
         
