@@ -3,6 +3,9 @@ import json
 import re
 import aiohttp
 
+# Ganti dengan API Key ScraperAPI Anda
+SCRAPER_API_KEY = "3d7a277f88ff87325e9ea603b83a76c6"
+
 EXACT_TARGET_PACKAGES = [
     "bonus kuota whatsapp 10gb",
     "bonus kuota facebook 10gb",
@@ -35,23 +38,17 @@ def parse_mb_from_text(text_kuota: str) -> float:
 
 
 async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
-    # Menggunakan Proxy Reverse untuk bypass blokir IP Cloudflare 530
     target_url = (
         f"https://kuota.store/index.php?action=cek_kuota&msisdn={nomor}"
     )
-    proxy_url = f"https://corsproxy.io/?{target_url}"
 
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json",
-    }
+    # Memanggil via ScraperAPI untuk bypass Cloudflare
+    scraper_url = f"http://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url={target_url}"
 
-    timeout = aiohttp.ClientTimeout(total=10)
+    timeout = aiohttp.ClientTimeout(total=20)
 
     try:
-        async with session.get(
-            proxy_url, headers=headers, timeout=timeout
-        ) as resp:
+        async with session.get(scraper_url, timeout=timeout) as resp:
             if resp.status == 200:
                 try:
                     data = await resp.json(content_type=None)
