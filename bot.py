@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import aiohttp
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -10,7 +11,6 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-from curl_cffi.requests import AsyncSession
 
 from web_checker import fetch_single_nomor_async
 
@@ -78,7 +78,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         total_nomor = len(DAFTAR_NOMOR_XL)
         results = []
 
-        async with AsyncSession() as session:
+        # Menggunakan aiohttp standard
+        async with aiohttp.ClientSession() as session:
             for idx, nomor in enumerate(DAFTAR_NOMOR_XL, 1):
                 try:
                     await query.edit_message_text(
