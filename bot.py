@@ -17,7 +17,7 @@ from web_checker import fetch_single_nomor_async
 # ==============================================================================
 # KONFIGURASI BOT
 # ==============================================================================
-BOT_TOKEN = "GANTI_DENGAN_TOKEN_BOTFATHER_ANDA"
+BOT_TOKEN = "8702246699:AAHbVnZqmrlH4Eku29gzArtEZR05YjbTD5E"
 
 # Daftar nomor default (dapat ditambahkan massal lewat Telegram)
 DAFTAR_NOMOR_XL = []
