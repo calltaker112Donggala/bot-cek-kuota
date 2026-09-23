@@ -3,9 +3,6 @@ import json
 import re
 import aiohttp
 
-# Ganti dengan API Key ScraperAPI Anda
-SCRAPER_API_KEY = "3d7a277f88ff87325e9ea603b83a76c6"
-
 EXACT_TARGET_PACKAGES = [
     "bonus kuota whatsapp 10gb",
     "bonus kuota facebook 10gb",
@@ -38,17 +35,34 @@ def parse_mb_from_text(text_kuota: str) -> float:
 
 
 async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
-    target_url = (
-        f"https://kuota.store/index.php?action=cek_kuota&msisdn={nomor}"
-    )
+    url = "https://kuota.store/index.php"
+    params = {"action": "cek_kuota", "msisdn": nomor}
 
-    # Memanggil via ScraperAPI untuk bypass Cloudflare
-    scraper_url = f"http://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url={target_url}"
+    # Header menyerupai browser Chrome Windows asli untuk melewati 403 Forbidden
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/128.0.0.0 Safari/537.36"
+        ),
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer": "https://kuota.store/",
+        "X-Requested-With": "XMLHttpRequest",
+        "Sec-Ch-Ua": '"Chromium";v="128", "Not;A=Brand";v="24", "Google Chrome";v="128"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
+    }
 
-    timeout = aiohttp.ClientTimeout(total=20)
+    timeout = aiohttp.ClientTimeout(total=10)
 
     try:
-        async with session.get(scraper_url, timeout=timeout) as resp:
+        async with session.get(
+            url, params=params, headers=headers, timeout=timeout
+        ) as resp:
             if resp.status == 200:
                 try:
                     data = await resp.json(content_type=None)
@@ -113,6 +127,12 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
                     "paket_kritis": paket_kritis,
                     "punya_xtra_combo": punya_xtra_combo,
                 }
+            elif resp.status == 403:
+                return {
+                    "nomor": nomor,
+                    "status": "ERROR",
+                    "pesan": "HTTP 403 (Akses Ditolak/Cloudflare Anti-Bot)",
+                }
             else:
                 return {
                     "nomor": nomor,
@@ -132,4 +152,3 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
             "status": "ERROR",
             "pesan": f"Gagal terkoneksi: {str(e)}",
         }
-        
