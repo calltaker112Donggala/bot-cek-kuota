@@ -58,44 +58,62 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
                 except Exception:
                     data = json.loads(await resp.text())
 
-                # Jika status API dari KMSP false
                 if isinstance(data, dict) and data.get("status") == False:
                     return {
                         "nomor": nomor,
                         "status": "ERROR",
-                        "pesan": data.get("message", "Gagal mengambil data dari KMSP")
+                        "pesan": data.get("message", "Gagal mengambil data KMSP")
                     }
 
-                # ==============================================================
-                # MENAMPILKAN FULL TEKS KMSP KE LOG RAILWAY
-                # ==============================================================
                 hasil_asli = data.get("data", {}).get("hasil", "")
-                print(f"\n=== FULL DATA KMSP {nomor} ===")
-                # Bersihkan tag html agar mudah dibaca di log
-                print(hasil_asli.replace("<br>", "\n").replace("</br>", "\n"))
-                print("================================\n")
+                
+                # Pembersihan tag HTML dan ubah jadi huruf kecil semua
+                hasil_text = hasil_asli.lower().replace("<br>", "\n").replace("</br>", "\n")
 
                 paket_kritis = []
                 punya_xtra_combo = False
 
-                hasil_text = hasil_asli.lower().replace("<br>", "\n").replace("</br>", "\n")
-
                 if "xtra combo" in hasil_text:
                     punya_xtra_combo = True
 
-                for target_pkg in EXACT_TARGET_PACKAGES:
-                    if target_pkg in hasil_text:
-                        idx = hasil_text.find(target_pkg)
-                        chunk = hasil_text[idx : idx + 120]
-                        match = re.search(r"(\d+(?:\.\d+)?)\s*(gb|mb|kb)", chunk)
+                # Memecah teks utuh KMSP menjadi blok per paket (pemisah: kata "quota:")
+                blocks = re.split(r'quota:', hasil_text)
+                
+                for block in blocks:
+                    lines = block.strip().split('\n')
+                    if not lines:
+                        continue
+                    
+                    # Baris pertama setelah pemotongan adalah Nama Paket
+                    pkg_name = lines[0].strip()
+                    
+                    # Periksa apakah blok ini adalah paket 5 target kita
+                    target_found = False
+                    for target_pkg in EXACT_TARGET_PACKAGES:
+                        if target_pkg in pkg_name:
+                            target_found = True
+                            break
+                            
+                    if target_found:
+                        # Cari spesifik teks "sisa kuota: X GB/MB" di dalam blok ini saja
+                        match = re.search(r"sisa kuota:\s*([\d\.]+)(?:\s*(gb|mb|kb))?", block)
                         if match:
-                            sisa_str = match.group(0).upper()
+                            sisa_val = match.group(1)
+                            sisa_unit = match.group(2)
+                            
+                            # Jika sisa kuota = 0, KMSP tidak menuliskan 'GB/MB'. Kita setelan default ke MB.
+                            if sisa_unit:
+                                sisa_str = f"{sisa_val} {sisa_unit.upper()}"
+                            else:
+                                sisa_str = f"{sisa_val} MB"
+                                
                             sisa_mb = parse_mb_from_text(sisa_str)
                             
+                            # Jika sisa kuota di bawah ambang batas (500 MB)
                             if sisa_mb < AMBANG_BATAS_MB:
                                 sisa_gb = sisa_mb / 1024.0
                                 paket_kritis.append({
-                                    "nama_paket": target_pkg.title(),
+                                    "nama_paket": pkg_name.title(),
                                     "sisa_mb": sisa_mb,
                                     "sisa_gb": sisa_gb,
                                     "sisa_str": sisa_str,
