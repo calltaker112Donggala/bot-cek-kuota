@@ -35,54 +35,48 @@ def parse_mb_from_text(text_kuota: str) -> float:
 
 
 async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
-    url = "https://kuota.store/index.php"
-    params = {"action": "cek_kuota", "msisdn": nomor}
-
-    # Header menyerupai browser Chrome Windows asli untuk melewati 403 Forbidden
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/128.0.0.0 Safari/537.36"
-        ),
-        "Accept": "application/json, text/javascript, */*; q=0.01",
-        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Referer": "https://kuota.store/",
-        "X-Requested-With": "XMLHttpRequest",
-        "Sec-Ch-Ua": '"Chromium";v="128", "Not;A=Brand";v="24", "Google Chrome";v="128"',
-        "Sec-Ch-Ua-Mobile": "?0",
-        "Sec-Ch-Ua-Platform": '"Windows"',
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-origin",
+    # Endpoint KMSP Store terbaru
+    url = "https://apigw.kmsp-store.com/sidompul/v4/cek_kuota"
+    params = {
+        "msisdn": nomor,
+        "isJSON": "true"
     }
 
-    timeout = aiohttp.ClientTimeout(total=10)
+    # Header KMSP sesuai dengan skrip PHP yang Anda dapatkan
+    headers = {
+        "Authorization": "Basic c2lkb21wdWxhcGk6YXBpZ3drbXNw",
+        "X-API-Key": "60ef29aa-a648-4668-90ae-20951ef90c55",
+        "X-App-Version": "4.0.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json"
+    }
+
+    timeout = aiohttp.ClientTimeout(total=15)
 
     try:
-        async with session.get(
-            url, params=params, headers=headers, timeout=timeout
-        ) as resp:
+        async with session.get(url, params=params, headers=headers, timeout=timeout) as resp:
             if resp.status == 200:
                 try:
                     data = await resp.json(content_type=None)
                 except Exception:
                     text_resp = await resp.text()
                     data = json.loads(text_resp)
+                
+                # Menampilkan log response di Railway untuk memantau struktur JSON
+                print(f"Data API {nomor}: {str(data)[:150]}...")
 
-                if (
-                    not isinstance(data, dict)
-                    or data.get("status") != "success"
-                ):
+                # Jika KMSP mengembalikan error di dalam JSON-nya
+                if isinstance(data, dict) and data.get("status") == False:
                     return {
                         "nomor": nomor,
                         "status": "ERROR",
-                        "pesan": "Server web lambat / gagal merespons",
+                        "pesan": data.get("message", "Gagal dari server KMSP")
                     }
 
                 paket_kritis = []
                 punya_xtra_combo = False
 
+                # Karena KMSP juga mengambil dari Sidompul, strukturnya kemungkinan sama persis
                 quotas_groups = (
                     data.get("data", {})
                     .get("data_sp", {})
@@ -104,10 +98,7 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
                         for b in benefits:
                             remaining_str = str(b.get("remaining", "0"))
 
-                            if any(
-                                target in pkg_name_lower
-                                for target in EXACT_TARGET_PACKAGES
-                            ):
+                            if any(target in pkg_name_lower for target in EXACT_TARGET_PACKAGES):
                                 sisa_mb = parse_mb_from_text(remaining_str)
 
                                 if sisa_mb < AMBANG_BATAS_MB:
@@ -127,24 +118,24 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
                     "paket_kritis": paket_kritis,
                     "punya_xtra_combo": punya_xtra_combo,
                 }
-            elif resp.status == 403:
+            elif resp.status == 401 or resp.status == 403:
                 return {
                     "nomor": nomor,
                     "status": "ERROR",
-                    "pesan": "HTTP 403 (Akses Ditolak/Cloudflare Anti-Bot)",
+                    "pesan": f"HTTP {resp.status} (API Key KMSP Kadaluarsa / Ditolak)"
                 }
             else:
                 return {
                     "nomor": nomor,
                     "status": "ERROR",
-                    "pesan": f"HTTP {resp.status}",
+                    "pesan": f"HTTP {resp.status}"
                 }
 
     except asyncio.TimeoutError:
         return {
             "nomor": nomor,
             "status": "ERROR",
-            "pesan": "Timeout (Server kuota.store lambat)",
+            "pesan": "Timeout (Server KMSP lambat)",
         }
     except Exception as e:
         return {
