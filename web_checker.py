@@ -3,7 +3,6 @@ import json
 import re
 import aiohttp
 
-# Kita gunakan kata kunci yang lebih umum agar lebih akurat mendeteksi di dalam teks KMSP
 EXACT_TARGET_PACKAGES = [
     "bonus kuota whatsapp",
     "bonus kuota facebook",
@@ -67,32 +66,27 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
                         "pesan": data.get("message", "Gagal mengambil data dari KMSP")
                     }
 
+                # ==============================================================
+                # MENAMPILKAN FULL TEKS KMSP KE LOG RAILWAY
+                # ==============================================================
+                hasil_asli = data.get("data", {}).get("hasil", "")
+                print(f"\n=== FULL DATA KMSP {nomor} ===")
+                # Bersihkan tag html agar mudah dibaca di log
+                print(hasil_asli.replace("<br>", "\n").replace("</br>", "\n"))
+                print("================================\n")
+
                 paket_kritis = []
                 punya_xtra_combo = False
 
-                # -----------------------------------------------------------
-                # LOGIKA PARSING TEKS BARU UNTUK KMSP
-                # -----------------------------------------------------------
-                # Ambil teks HTML dari key 'hasil', ubah ke huruf kecil semua (lowercase)
-                hasil_text = data.get("data", {}).get("hasil", "").lower()
-                
-                # Bersihkan tag HTML agar lebih mudah dibaca Regex
-                hasil_text = hasil_text.replace("<br>", "\n").replace("</br>", "\n")
+                hasil_text = hasil_asli.lower().replace("<br>", "\n").replace("</br>", "\n")
 
-                # Cek ketersediaan Xtra Combo
                 if "xtra combo" in hasil_text:
                     punya_xtra_combo = True
 
-                # Cari paket bonus kritis (< 0.5 GB)
                 for target_pkg in EXACT_TARGET_PACKAGES:
                     if target_pkg in hasil_text:
-                        # Cari posisi teks paket tersebut
                         idx = hasil_text.find(target_pkg)
-                        
-                        # Ambil potongan teks (120 karakter) setelah nama paket untuk menemukan jumlah kuotanya
                         chunk = hasil_text[idx : idx + 120]
-                        
-                        # Regex untuk menangkap pola angka dan satuan, misal: "1.5 GB", "250 MB"
                         match = re.search(r"(\d+(?:\.\d+)?)\s*(gb|mb|kb)", chunk)
                         if match:
                             sisa_str = match.group(0).upper()
@@ -101,7 +95,7 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
                             if sisa_mb < AMBANG_BATAS_MB:
                                 sisa_gb = sisa_mb / 1024.0
                                 paket_kritis.append({
-                                    "nama_paket": target_pkg.title() + " 10GB",
+                                    "nama_paket": target_pkg.title(),
                                     "sisa_mb": sisa_mb,
                                     "sisa_gb": sisa_gb,
                                     "sisa_str": sisa_str,
@@ -118,7 +112,7 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
                 return {
                     "nomor": nomor,
                     "status": "ERROR",
-                    "pesan": f"HTTP {resp.status} (Masalah dari server KMSP)"
+                    "pesan": f"HTTP {resp.status} (Masalah server KMSP)"
                 }
 
     except asyncio.TimeoutError:
