@@ -3,13 +3,13 @@ import json
 import re
 import aiohttp
 
+# Kita gunakan kata kunci yang lebih umum agar lebih akurat mendeteksi di dalam teks KMSP
 EXACT_TARGET_PACKAGES = [
-    "bonus kuota whatsapp 10gb",
-    "bonus kuota facebook 10gb",
-    "bonus kuota instagram 1gb",
-    "bonus kuota instagram 10gb",
-    "bonus kuota youtube 10gb",
-    "bonus kuota tiktok 10gb",
+    "bonus kuota whatsapp",
+    "bonus kuota facebook",
+    "bonus kuota instagram",
+    "bonus kuota youtube",
+    "bonus kuota tiktok",
 ]
 
 AMBANG_BATAS_MB = 500.0
@@ -35,19 +35,17 @@ def parse_mb_from_text(text_kuota: str) -> float:
 
 
 async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
-    # Endpoint KMSP Store terbaru
     url = "https://apigw.kmsp-store.com/sidompul/v4/cek_kuota"
     params = {
         "msisdn": nomor,
         "isJSON": "true"
     }
 
-    # Header KMSP sesuai dengan skrip PHP yang Anda dapatkan
     headers = {
         "Authorization": "Basic c2lkb21wdWxhcGk6YXBpZ3drbXNw",
         "X-API-Key": "60ef29aa-a648-4668-90ae-20951ef90c55",
         "X-App-Version": "4.0.0",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept": "application/json"
     }
 
@@ -59,58 +57,55 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
                 try:
                     data = await resp.json(content_type=None)
                 except Exception:
-                    text_resp = await resp.text()
-                    data = json.loads(text_resp)
-                
-                # Menampilkan log response di Railway untuk memantau struktur JSON
-                print(f"Data API {nomor}: {str(data)[:150]}...")
+                    data = json.loads(await resp.text())
 
-                # Jika KMSP mengembalikan error di dalam JSON-nya
+                # Jika status API dari KMSP false
                 if isinstance(data, dict) and data.get("status") == False:
                     return {
                         "nomor": nomor,
                         "status": "ERROR",
-                        "pesan": data.get("message", "Gagal dari server KMSP")
+                        "pesan": data.get("message", "Gagal mengambil data dari KMSP")
                     }
 
                 paket_kritis = []
                 punya_xtra_combo = False
 
-                # Karena KMSP juga mengambil dari Sidompul, strukturnya kemungkinan sama persis
-                quotas_groups = (
-                    data.get("data", {})
-                    .get("data_sp", {})
-                    .get("quotas", {})
-                    .get("value", [])
-                )
+                # -----------------------------------------------------------
+                # LOGIKA PARSING TEKS BARU UNTUK KMSP
+                # -----------------------------------------------------------
+                # Ambil teks HTML dari key 'hasil', ubah ke huruf kecil semua (lowercase)
+                hasil_text = data.get("data", {}).get("hasil", "").lower()
+                
+                # Bersihkan tag HTML agar lebih mudah dibaca Regex
+                hasil_text = hasil_text.replace("<br>", "\n").replace("</br>", "\n")
 
-                for group in quotas_groups:
-                    for item in group:
-                        pkg_info = item.get("packages", {})
-                        pkg_name = str(pkg_info.get("name", "")).strip()
-                        pkg_name_lower = pkg_name.lower()
+                # Cek ketersediaan Xtra Combo
+                if "xtra combo" in hasil_text:
+                    punya_xtra_combo = True
 
-                        if "xtra combo" in pkg_name_lower:
-                            punya_xtra_combo = True
-
-                        benefits = item.get("benefits", [])
-
-                        for b in benefits:
-                            remaining_str = str(b.get("remaining", "0"))
-
-                            if any(target in pkg_name_lower for target in EXACT_TARGET_PACKAGES):
-                                sisa_mb = parse_mb_from_text(remaining_str)
-
-                                if sisa_mb < AMBANG_BATAS_MB:
-                                    sisa_gb = sisa_mb / 1024.0
-                                    paket_kritis.append(
-                                        {
-                                            "nama_paket": pkg_name,
-                                            "sisa_mb": sisa_mb,
-                                            "sisa_gb": sisa_gb,
-                                            "sisa_str": remaining_str,
-                                        }
-                                    )
+                # Cari paket bonus kritis (< 0.5 GB)
+                for target_pkg in EXACT_TARGET_PACKAGES:
+                    if target_pkg in hasil_text:
+                        # Cari posisi teks paket tersebut
+                        idx = hasil_text.find(target_pkg)
+                        
+                        # Ambil potongan teks (120 karakter) setelah nama paket untuk menemukan jumlah kuotanya
+                        chunk = hasil_text[idx : idx + 120]
+                        
+                        # Regex untuk menangkap pola angka dan satuan, misal: "1.5 GB", "250 MB"
+                        match = re.search(r"(\d+(?:\.\d+)?)\s*(gb|mb|kb)", chunk)
+                        if match:
+                            sisa_str = match.group(0).upper()
+                            sisa_mb = parse_mb_from_text(sisa_str)
+                            
+                            if sisa_mb < AMBANG_BATAS_MB:
+                                sisa_gb = sisa_mb / 1024.0
+                                paket_kritis.append({
+                                    "nama_paket": target_pkg.title() + " 10GB",
+                                    "sisa_mb": sisa_mb,
+                                    "sisa_gb": sisa_gb,
+                                    "sisa_str": sisa_str,
+                                })
 
                 return {
                     "nomor": nomor,
@@ -118,24 +113,19 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
                     "paket_kritis": paket_kritis,
                     "punya_xtra_combo": punya_xtra_combo,
                 }
-            elif resp.status == 401 or resp.status == 403:
-                return {
-                    "nomor": nomor,
-                    "status": "ERROR",
-                    "pesan": f"HTTP {resp.status} (API Key KMSP Kadaluarsa / Ditolak)"
-                }
+            
             else:
                 return {
                     "nomor": nomor,
                     "status": "ERROR",
-                    "pesan": f"HTTP {resp.status}"
+                    "pesan": f"HTTP {resp.status} (Masalah dari server KMSP)"
                 }
 
     except asyncio.TimeoutError:
         return {
             "nomor": nomor,
             "status": "ERROR",
-            "pesan": "Timeout (Server KMSP lambat)",
+            "pesan": "Timeout (Server KMSP sedang lambat)",
         }
     except Exception as e:
         return {
