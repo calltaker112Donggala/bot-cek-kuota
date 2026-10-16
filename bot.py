@@ -1,6 +1,9 @@
 import asyncio
 import logging
 import aiohttp
+import os
+import threading
+from flask import Flask
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -13,6 +16,20 @@ from telegram.ext import (
 )
 
 from web_checker import fetch_single_nomor_async
+
+# ==============================================================================
+# DUMMY WEB SERVER (UNTUK RENDER.COM)
+# ==============================================================================
+web_app = Flask(__name__)
+
+@web_app.route('/')
+def home():
+    return "Bot Pemantau Kuota is Running on Render!"
+
+def run_web():
+    # Render memberikan port dinamis melalui environment variable $PORT
+    port = int(os.environ.get("PORT", 10000))
+    web_app.run(host="0.0.0.0", port=port)
 
 # ==============================================================================
 # KONFIGURASI BOT
@@ -30,18 +47,10 @@ logging.basicConfig(level=logging.INFO)
 # ==============================================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
+        [InlineKeyboardButton("📝 Cek Kuota Massal", callback_data="cek_massal")],
         [
-            InlineKeyboardButton(
-                "📝 Cek Kuota Massal", callback_data="cek_massal"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "➕ Tambah Nomor", callback_data="tambah_nomor"
-            ),
-            InlineKeyboardButton(
-                "📋 List Nomor", callback_data="list_nomor"
-            ),
+            InlineKeyboardButton("➕ Tambah Nomor", callback_data="tambah_nomor"),
+            InlineKeyboardButton("📋 List Nomor", callback_data="list_nomor"),
         ],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -55,13 +64,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     if update.message:
-        await update.message.reply_text(
-            pesan, parse_mode="Markdown", reply_markup=reply_markup
-        )
+        await update.message.reply_text(pesan, parse_mode="Markdown", reply_markup=reply_markup)
     else:
-        await update.callback_query.edit_message_text(
-            pesan, parse_mode="Markdown", reply_markup=reply_markup
-        )
+        await update.callback_query.edit_message_text(pesan, parse_mode="Markdown", reply_markup=reply_markup)
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -70,15 +75,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "cek_massal":
         if not DAFTAR_NOMOR_XL:
-            await query.edit_message_text(
-                "❌ Belum ada nomor tersimpan. Silakan tambah nomor terlebih dahulu."
-            )
+            await query.edit_message_text("❌ Belum ada nomor tersimpan. Silakan tambah nomor terlebih dahulu.")
             return
 
         total_nomor = len(DAFTAR_NOMOR_XL)
         results = []
 
-        # Menggunakan aiohttp standard
         async with aiohttp.ClientSession() as session:
             for idx, nomor in enumerate(DAFTAR_NOMOR_XL, 1):
                 try:
@@ -108,9 +110,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     pesan_hasil += f"• **{nomor_display}** detail kuota:\n"
                     for pkt in list_kritis:
-                        pesan_hasil += (
-                            f" - {pkt['sisa_gb']:.2f}GB | {pkt['nama_paket']}\n"
-                        )
+                        pesan_hasil += f" - {pkt['sisa_gb']:.2f}GB | {pkt['nama_paket']}\n"
                     pesan_hasil += "\n"
             else:
                 pesan_hasil += f"• **{res['nomor']}**: ❌ {res['pesan']}\n\n"
@@ -119,14 +119,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pesan_hasil += "✅ _Semua paket bonus > 0.5 GB / Aman._\n\n"
 
         pesan_hasil += "-----------------------------------\n\n"
-
         pesan_hasil += "🚫 **List 2 (Tanpa Paket Xtra Combo)**\n\n"
         tanpa_xtra_combo = []
 
         for res in results:
-            if res["status"] == "SUCCESS" and not res.get(
-                "punya_xtra_combo", False
-            ):
+            if res["status"] == "SUCCESS" and not res.get("punya_xtra_combo", False):
                 nomor_display = res["nomor"]
                 if nomor_display.startswith("0"):
                     nomor_display = "62" + nomor_display[1:]
@@ -139,18 +136,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pesan_hasil += "✅ _Semua nomor memiliki paket Xtra Combo._"
 
         keyboard = [
-            [
-                InlineKeyboardButton(
-                    "🔄 Cek Ulang", callback_data="cek_massal"
-                )
-            ],
+            [InlineKeyboardButton("🔄 Cek Ulang", callback_data="cek_massal")],
             [InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")],
         ]
-        await query.edit_message_text(
-            pesan_hasil,
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-        )
+        await query.edit_message_text(pesan_hasil, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif query.data == "list_nomor":
         if not DAFTAR_NOMOR_XL:
@@ -161,18 +150,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pesan += f"{idx}. `{no}`\n"
 
         keyboard = [
-            [
-                InlineKeyboardButton(
-                    "➕ Tambah Nomor", callback_data="tambah_nomor"
-                )
-            ],
+            [InlineKeyboardButton("➕ Tambah Nomor", callback_data="tambah_nomor")],
             [InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")],
         ]
-        await query.edit_message_text(
-            pesan,
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-        )
+        await query.edit_message_text(pesan, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 # ==============================================================================
@@ -214,15 +195,11 @@ async def simpan_nomor(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if nomor_berhasil:
         pesan_laporan += f"✅ **Berhasil Ditambahkan ({len(nomor_berhasil)}):**\n"
-        pesan_laporan += (
-            ", ".join([f"`{no}`" for no in nomor_berhasil]) + "\n\n"
-        )
+        pesan_laporan += ", ".join([f"`{no}`" for no in nomor_berhasil]) + "\n\n"
 
     if nomor_duplikat:
         pesan_laporan += f"ℹ️ **Sudah Ada ({len(nomor_duplikat)}):**\n"
-        pesan_laporan += (
-            ", ".join([f"`{no}`" for no in nomor_duplikat]) + "\n\n"
-        )
+        pesan_laporan += ", ".join([f"`{no}`" for no in nomor_duplikat]) + "\n\n"
 
     if nomor_gagal:
         pesan_laporan += f"❌ **Format Tidak Valid ({len(nomor_gagal)}):**\n"
@@ -231,20 +208,11 @@ async def simpan_nomor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pesan_laporan += f"Total nomor tersimpan: **{len(DAFTAR_NOMOR_XL)} Nomor**."
 
     keyboard = [
-        [
-            InlineKeyboardButton(
-                "📝 Cek Kuota Massal", callback_data="cek_massal"
-            )
-        ],
+        [InlineKeyboardButton("📝 Cek Kuota Massal", callback_data="cek_massal")],
         [InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")],
     ]
 
-    await update.message.reply_text(
-        pesan_laporan,
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-    )
-
+    await update.message.reply_text(pesan_laporan, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
     return ConversationHandler.END
 
 
@@ -252,19 +220,16 @@ async def simpan_nomor(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # MAIN FUNCTION
 # ==============================================================================
 if __name__ == "__main__":
+    # 1. Menjalankan Flask Server di latar belakang (agar Render.com tidak mendeteksi crash)
+    t = threading.Thread(target=run_web)
+    t.start()
+
+    # 2. Menjalankan Bot Telegram
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(mulai_tambah, pattern="^tambah_nomor$")
-        ],
-        states={
-            MINTA_NOMOR: [
-                MessageHandler(
-                    filters.TEXT & ~filters.COMMAND, simpan_nomor
-                )
-            ]
-        },
+        entry_points=[CallbackQueryHandler(mulai_tambah, pattern="^tambah_nomor$")],
+        states={MINTA_NOMOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, simpan_nomor)]},
         fallbacks=[],
     )
 
@@ -275,4 +240,3 @@ if __name__ == "__main__":
 
     print("🚀 Bot Pemantau Kuota & Xtra Combo running...")
     app.run_polling()
-    
