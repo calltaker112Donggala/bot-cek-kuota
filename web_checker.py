@@ -1,35 +1,38 @@
 import asyncio
-import json
 import aiohttp
 
 async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
-    url = "https://apigw.kmsp-store.com/sidompul/v4/cek_kuota"
-    params = {"msisdn": nomor, "isJSON": "true"}
+    # Mengarah ke web Murakata
+    url = "https://murakata.22web.org/cek-kuota.php"
+    
+    # Parameter i=nomor sesuai dengan URL yang Anda berikan
+    params = {"i": nomor}
+    
     headers = {
-        "Authorization": "Basic c2lkb21wdWxhcGk6YXBpZ3drbXNw",
-        "X-API-Key": "60ef29aa-a648-4668-90ae-20951ef90c55",
-        "X-App-Version": "4.0.0"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     }
     
     try:
-        async with session.get(url, params=params, headers=headers, timeout=15) as resp:
+        async with session.get(url, params=params, headers=headers, timeout=20) as resp:
             if resp.status == 200:
-                data = json.loads(await resp.text())
+                # Ambil seluruh teks HTML dari website
+                teks_mentah = await resp.text()
                 
-                # Ambil teks mentah dari KMSP
-                hasil_asli = data.get("data", {}).get("hasil", "")
-                teks_mentah = hasil_asli.replace("<br>", "\n").replace("</br>", "\n")
+                # Bersihkan sedikit tag HTML sederhana agar mudah dibaca di Telegram
+                teks_bersih = teks_mentah.replace("<br>", "\n").replace("</br>", "\n").replace("<br/>", "\n")
                 
-                if not teks_mentah.strip():
-                    teks_mentah = "DATA KOSONG DARI API"
+                if not teks_bersih.strip():
+                    teks_bersih = "HALAMAN KOSONG"
                     
                 # KITA PAKSA ERROR AGAR TEKS MENTAHNYA TAMPIL DI TELEGRAM
                 return {
                     "nomor": nomor,
                     "status": "ERROR",
-                    "pesan": f"\n[TEKS ASLI KMSP]\n{teks_mentah[:800]}"
+                    "pesan": f"\n[TEKS ASLI MURAKATA]\n{teks_bersih[:900]}"
                 }
             else:
-                return {"nomor": nomor, "status": "ERROR", "pesan": "Gagal HTTP"}
+                return {"nomor": nomor, "status": "ERROR", "pesan": f"Gagal HTTP: {resp.status}"}
+    except asyncio.TimeoutError:
+        return {"nomor": nomor, "status": "ERROR", "pesan": "Website Murakata lambat merespons (Timeout)"}
     except Exception as e:
-        return {"nomor": nomor, "status": "ERROR", "pesan": str(e)}
+        return {"nomor": nomor, "status": "ERROR", "pesan": f"Gagal terkoneksi: {str(e)}"}
