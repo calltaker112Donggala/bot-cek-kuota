@@ -6,7 +6,7 @@ async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
     target_url = f"https://murakata.22web.org/cek-kuota.php?i={nomor}"
     
     # Masukkan API Key dari scraperapi.com milik Anda
-    SCRAPER_API_KEY = "API_KEY_ANDA_DISINI"
+    SCRAPER_API_KEY = "3d7a277f88ff87325e9ea603b83a76c6"
     
     # render=true digunakan agar JavaScript di web dimuat penuh oleh ScraperAPI
     scraper_url = f"http://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url={target_url}&render=true"
