@@ -2,34 +2,37 @@ import asyncio
 import aiohttp
 
 async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
-    # Ganti URL ini dengan link persis saat Anda membuka menu cek kuota di web mereka
-    url = "https://akrab.axiestore.com/" 
+    # URL Asli yang ingin dituju
+    target_url = f"https://murakata.22web.org/cek-kuota.php?i={nomor}"
     
-    # Kita coba tebak parameternya (biasanya 'nomor', 'msisdn', atau 'no')
-    params = {"nomor": nomor} 
+    # GANTI 'API_KEY_ANDA_DISINI' DENGAN API KEY DARI SCRAPERAPI.COM
+    SCRAPER_API_KEY = "3d7a277f88ff87325e9ea603b83a76c6"
     
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-    }
+    # URL Endpoint milik ScraperAPI
+    # Parameter render=true menyuruh server mereka menggunakan Headless Browser untuk mengeksekusi JavaScript
+    scraper_url = f"http://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url={target_url}&render=true"
     
     try:
-        async with session.get(url, params=params, headers=headers, timeout=20) as resp:
-            teks_mentah = await resp.text()
-            
-            # Bersihkan sedikit tag HTML agar tidak berantakan di Telegram
-            teks_bersih = teks_mentah.replace("<br>", "\n").replace("</br>", "\n").replace("<br/>", "\n")
-            
-            if not teks_bersih.strip():
-                teks_bersih = "HALAMAN KOSONG"
+        # Perbesar timeout karena proses render browser asli butuh waktu
+        async with session.get(scraper_url, timeout=30) as resp:
+            if resp.status == 200:
+                teks_mentah = await resp.text()
                 
-            # Kita paksa tampil di Telegram
-            return {
-                "nomor": nomor,
-                "status": "ERROR",
-                "pesan": f"\n[TEKS ASLI AXIESTORE]\nStatus HTTP: {resp.status}\n\n{teks_bersih[:800]}"
-            }
+                # Membersihkan tag HTML agar mudah dibaca saat pengujian
+                teks_bersih = teks_mentah.replace("<br>", "\n").replace("</br>", "\n")
+                
+                if not teks_bersih.strip():
+                    teks_bersih = "HALAMAN KOSONG"
+                    
+                # Kita kirim hasil mentah ini ke Telegram dulu untuk melihat isinya
+                return {
+                    "nomor": nomor,
+                    "status": "ERROR",
+                    "pesan": f"\n[TEKS ASLI MURAKATA VIA SCRAPER]\n{teks_bersih[:900]}"
+                }
+            else:
+                return {"nomor": nomor, "status": "ERROR", "pesan": f"Gagal HTTP: {resp.status}"}
     except asyncio.TimeoutError:
-        return {"nomor": nomor, "status": "ERROR", "pesan": "Website lambat merespons (Timeout)"}
+        return {"nomor": nomor, "status": "ERROR", "pesan": "ScraperAPI lambat merespons (Timeout)"}
     except Exception as e:
         return {"nomor": nomor, "status": "ERROR", "pesan": f"Gagal terkoneksi: {str(e)}"}
