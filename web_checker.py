@@ -1,38 +1,41 @@
 import asyncio
 import aiohttp
+import re
 
 async def fetch_single_nomor_async(session: aiohttp.ClientSession, nomor: str):
-    # URL Asli yang ingin dituju
     target_url = f"https://murakata.22web.org/cek-kuota.php?i={nomor}"
     
-    # GANTI 'API_KEY_ANDA_DISINI' DENGAN API KEY DARI SCRAPERAPI.COM
-    SCRAPER_API_KEY = "3d7a277f88ff87325e9ea603b83a76c6"
+    # Masukkan API Key dari scraperapi.com milik Anda
+    SCRAPER_API_KEY = "API_KEY_ANDA_DISINI"
     
-    # URL Endpoint milik ScraperAPI
-    # Parameter render=true menyuruh server mereka menggunakan Headless Browser untuk mengeksekusi JavaScript
+    # render=true digunakan agar JavaScript di web dimuat penuh oleh ScraperAPI
     scraper_url = f"http://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url={target_url}&render=true"
     
     try:
-        # Perbesar timeout karena proses render browser asli butuh waktu
-        async with session.get(scraper_url, timeout=30) as resp:
+        async with session.get(scraper_url, timeout=35) as resp:
             if resp.status == 200:
-                teks_mentah = await resp.text()
+                html_raw = await resp.text()
                 
-                # Membersihkan tag HTML agar mudah dibaca saat pengujian
-                teks_bersih = teks_mentah.replace("<br>", "\n").replace("</br>", "\n")
+                # Menghapus tag script, style, dan HTML tag agar tersisa teks bersihnya saja
+                clean_text = re.sub(r'<script.*?>.*?</script>', '', html_raw, flags=re.DOTALL | re.IGNORECASE)
+                clean_text = re.sub(r'<style.*?>.*?</style>', '', clean_text, flags=re.DOTALL | re.IGNORECASE)
+                clean_text = re.sub(r'<[^>]+>', '\n', clean_text)
                 
-                if not teks_bersih.strip():
-                    teks_bersih = "HALAMAN KOSONG"
-                    
-                # Kita kirim hasil mentah ini ke Telegram dulu untuk melihat isinya
+                # Merapikan baris-baris kosong
+                lines = [line.strip() for line in clean_text.splitlines() if line.strip()]
+                hasil_teks = "\n".join(lines)
+                
+                if not hasil_teks:
+                    hasil_teks = "TEKS KOSONG"
+                
                 return {
                     "nomor": nomor,
                     "status": "ERROR",
-                    "pesan": f"\n[TEKS ASLI MURAKATA VIA SCRAPER]\n{teks_bersih[:900]}"
+                    "pesan": f"\n[ISILAH DATA MURAKATA]\n{hasil_teks[:1500]}"
                 }
             else:
-                return {"nomor": nomor, "status": "ERROR", "pesan": f"Gagal HTTP: {resp.status}"}
+                return {"nomor": nomor, "status": "ERROR", "pesan": f"HTTP Scraper Error: {resp.status}"}
     except asyncio.TimeoutError:
-        return {"nomor": nomor, "status": "ERROR", "pesan": "ScraperAPI lambat merespons (Timeout)"}
+        return {"nomor": nomor, "status": "ERROR", "pesan": "Timeout saat menunggu ScraperAPI"}
     except Exception as e:
-        return {"nomor": nomor, "status": "ERROR", "pesan": f"Gagal terkoneksi: {str(e)}"}
+        return {"nomor": nomor, "status": "ERROR", "pesan": f"Gagal: {str(e)}"}
